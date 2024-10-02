@@ -1,19 +1,33 @@
+#include <cstddef>
 #include <span>
 #include <concepts>
 #include <cstdlib>
 #include <array>
 #include <iterator>
+#include <type_traits>
 
 
 inline constexpr std::ptrdiff_t dynamic_stride = -1;
 
+namespace detail {
+  struct Empty {
+    Empty() = default;
+    Empty(std::size_t) {}
+  };
+  struct Extent {
+    std::size_t Extent = 0;
+  };
+  struct Stride {
+    std::size_t Stride = 0;
+  };
+} // detail
 
 template
   < class T
   , std::size_t extent = std::dynamic_extent
   , std::ptrdiff_t stride = 1
   >
-class Slice {
+class Slice : std::conditional_t<extent != std::dynamic_extent, typename Iftrue, typename Iffalse>{
 public:
   template<class U>
   Slice(U& container);
