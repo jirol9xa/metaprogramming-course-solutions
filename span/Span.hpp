@@ -24,11 +24,6 @@ template
   >
 class Span : private std::conditional_t<extent == std::dynamic_extent, Extent, Empty>{
 public:
-  // Reimplement the standard span interface here
-  // (some more exotic methods are not checked by the tests and can be sipped)
-  // Note that unliike std, the methods name should be Capitalized!
-  // E.g. instead of subspan, do Subspan.
-  // Note that this does not apply to iterator methods like begin/end/etc.
   using element_type = T;
   using value_type = std::remove_cv_t<T>;
   using size_type = std::size_t;
