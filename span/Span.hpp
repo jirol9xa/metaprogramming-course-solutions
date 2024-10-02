@@ -141,6 +141,35 @@ public:
     return Span<T>(begin() + offset, count);
   }
 
+  template<std::size_t Offset, std::size_t Count = std::dynamic_extent>
+  constexpr auto Subspan() const {
+    if constexpr (extent != std::dynamic_extent) {
+      auto offsetedSpan = Last<extent - Offset>();
+      if constexpr (Count != std::dynamic_extent) {
+        return offsetedSpan.template First<Count>();
+      } else {
+        return offsetedSpan;
+      }
+    } else {
+      auto offsetedSpan = Last(Size() - Offset);
+      if constexpr (Count != std::dynamic_extent) {
+        return offsetedSpan.template First<Count>();
+      } else {
+        return offsetedSpan;
+      }
+    }
+  }
+  constexpr Span<element_type> Subspan(size_type offset, size_type count = std::dynamic_extent) const {
+    MPC_VERIFYF(offset < Size(), "Offset should be less than span length");
+
+    auto offsetedSpan = Last(Size() - offset);
+    if (count != std::dynamic_extent) {
+      return offsetedSpan.First(count);
+    } else {
+      return offsetedSpan;
+    }
+  }
+
   constexpr pointer Data() const noexcept { return data_; }
 
 private:
