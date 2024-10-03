@@ -114,9 +114,9 @@ public:
   Slice(U& container) : std::conditional_t<extent == std::dynamic_extent, detail::Extent, detail::Empty<0>>(std::ranges::size(container)), data_(std::ranges::data(container)) {}
 
   template <std::contiguous_iterator It>
-  Slice(It first, std::size_t count, std::ptrdiff_t skip) : std::conditional_t<extent == std::dynamic_extent, detail::Extent, detail::Empty<0>>(count),
-                                                            std::conditional_t<stride == detail::dynamic_stride, detail::Stride, detail::Empty<1>>(skip),
-                                                            data_(&*first)
+  Slice(It first, std::size_t count, std::ptrdiff_t skip = 1) : std::conditional_t<extent == std::dynamic_extent, detail::Extent, detail::Empty<0>>(count),
+                                                                std::conditional_t<stride == detail::dynamic_stride, detail::Stride, detail::Empty<1>>(skip),
+                                                                data_(&*first)
   {
     if constexpr (extent != std::dynamic_extent) {
       MPC_VERIFYF(extent == count, "Template and func args should match");
@@ -126,44 +126,82 @@ public:
     }
   }
 
-  // Data, Size, Stride, begin, end, casts, etc...
+  operator Slice<T, std::dynamic_extent, detail::dynamic_stride>() const {
+    return Slice<T, std::dynamic_extent, detail::dynamic_stride>(data_, Size(), Stride());
+  }
+
+  // TODO: Move implicit convertion ops to base classes
+  // operator Slice<T, extent, detail::dynamic_stride>() const {
+  //   static_assert(extent != std::dynamic_extent, "Casting to Slice<T, extent> must be done with extent != std::dynamic_extent");
+  //   return Slice<T, extent, detail::dynamic_stride>(data_, extent, Stride());
+  // }
+
+  // operator Slice<T, std::dynamic_extent, stride>() const {
+  //   static_assert(stride != detail::dynamic_stride, "Casting to Slice<T, std::dynamic_extent, stride> must be done with stride != dynamic_stride");
+  //   return Slice<T, std::dynamic_extent, stride>(data_, Size(), stride);
+  // }
+
+  // TODO: implicit convertion from Slice<T> -> Slice<typename std::remove_const_t<T>>
 
   Slice<T, std::dynamic_extent, stride> First(std::size_t count) const {
     return Slice<T, std::dynamic_extent, stride>(data_, count, stride);
   }
 
   template <std::size_t count>
-  Slice<T, /*?*/, stride>
-    First() const;
+  Slice<T, count, stride> First() const {
+    if constexpr (extent != std::dynamic_extent) {
+      static_assert(count < extent);
+    } else {
+      MPC_VERIFY(count < Size());
+    }
+
+    return Slice<T, count, stride>(data_, count, stride);
+  }
 
   Slice<T, std::dynamic_extent, stride> Last(std::size_t count) const {
-    return Slice<T, std::dynamic_extent, stride>(data_ + (Size() - count) * stride, stride);
+    MPC_VERIFY(count < Size());
+    return Slice<T, std::dynamic_extent, stride>(data_ + (Size() - count) * stride, count, stride);
   }
 
   template <std::size_t count>
-  Slice<T, /*?*/, stride>
-    Last() const;
+  Slice<T, count, stride> Last() const {
+    if constexpr (extent != std::dynamic_extent) {
+      static_assert(count < extent);
+    } else {
+      MPC_VERIFY(count < Size());
+    }
 
-  Slice<T, std::dynamic_extent, stride>
-    DropFirst(std::size_t count) const;
+    return Slice<T, count, stride>(data_ + (Size() - count) * stride, count, stride);
+  }
+
+  Slice<T, std::dynamic_extent, stride> DropFirst(std::size_t count) const {
+    return Last(Size() - count);
+  }
 
   template <std::size_t count>
-  Slice<T, /*?*/, stride>
-    DropFirst() const;
+  Slice<T, extent - count, stride> DropFirst() const {
+    static_assert(extent != std::dynamic_extent, "Can not call NTTP parametrized method on not NTTP parametrizes object");
+    return Last<extent - count>();
+  }
 
-  Slice<T, std::dynamic_extent, stride>
-    DropLast(std::size_t count) const;
+  Slice<T, std::dynamic_extent, stride> DropLast(std::size_t count) const {
+    return First(Size() - count);
+  }
 
   template <std::size_t count>
-  Slice<T, /*?*/, stride>
-    DropLast() const;
+  Slice<T, extent - count, stride> DropLast() const {
+    static_assert(extent != std::dynamic_extent, "Can not call NTTP parametrized method on not NTTP parametrizes object");
+    return First<extent - count>();
+  }
 
-  Slice<T, /*?*/, /*?*/>
-    Skip(std::ptrdiff_t skip) const;
+  Slice<T, std::dynamic_extent, detail::dynamic_stride> Skip(std::ptrdiff_t skip) const {
+    return Slice<T, std::dynamic_extent, detail::dynamic_stride>(data_, Size() * Stride() / skip, skip);
+  }
 
   template <std::ptrdiff_t skip>
-  Slice<T, /*?*/, /*?*/>
-    Skip() const;
+  Slice<T, std::dynamic_extent, skip> Skip() const {
+    return Slice<T, std::dynamic_extent, skip>(data_, Size() * Stride() / skip, skip);
+  }
 
 private:
   T* data_;
