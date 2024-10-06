@@ -5,6 +5,7 @@
 #include <span>
 #include <concepts>
 #include <cstdlib>
+#include <vector>
 #include <array>
 #include <iterator>
 #include <type_traits>
@@ -133,24 +134,17 @@ public:
   using reverse_iterator = std::reverse_iterator<iterator>;
 
   constexpr Slice() = default;
+  constexpr Slice(const Slice<T, extent, stride>&) = default;
 
-  constexpr explicit Slice(const std::array<T, extent> &arr, std::ptrdiff_t skip = 1) : std::conditional_t<stride == detail::dynamic_stride, detail::Stride, detail::Empty<1>>(skip), data_(arr.data()) {}
-
-  template<class U>
-  constexpr Slice(U& container) : std::conditional_t<extent == std::dynamic_extent, detail::Extent, detail::Empty<0>>(std::size(container)), data_(std::data(container)) {}
+  constexpr Slice(std::array<T, extent>& arr, std::ptrdiff_t skip = 1) : std::conditional_t<stride == detail::dynamic_stride, detail::Stride, detail::Empty<1>>(skip), data_(arr.data()) {}
 
   template <std::contiguous_iterator It>
   constexpr Slice(It first, std::size_t count, std::ptrdiff_t skip = 1) : std::conditional_t<extent == std::dynamic_extent, detail::Extent, detail::Empty<0>>(count),
                                                                           std::conditional_t<stride == detail::dynamic_stride, detail::Stride, detail::Empty<1>>(skip),
-                                                                          data_(&*first)
-  {
-    if constexpr (extent != std::dynamic_extent) {
-      MPC_VERIFYF(extent == count, "Template and func args should match");
-    }
-    if constexpr (stride != detail::dynamic_stride) {
-      MPC_VERIFYF(stride == skip, "Template and func args should match");
-    }
-  }
+                                                                          data_(&*first)  {}
+  template <typename U>
+  constexpr Slice(std::vector<U>& vec, std::ptrdiff_t skip = 1) : Slice(vec.begin(), vec.size(), skip) {}
+
 
   constexpr pointer Data() const noexcept { return data_; }
 
@@ -244,13 +238,13 @@ public:
     return Slice<T, count, stride>(data_, count, stride);
   }
 
-  Slice<T, std::dynamic_extent, stride> Last(std::size_t count) const {
+  constexpr Slice<T, std::dynamic_extent, stride> Last(std::size_t count) const {
     MPC_VERIFY(count < Size());
     return Slice<T, std::dynamic_extent, stride>(data_ + (Size() - count) * stride, count, stride);
   }
 
   template <std::size_t count>
-  Slice<T, count, stride> Last() const {
+  constexpr Slice<T, count, stride> Last() const {
     if constexpr (extent != std::dynamic_extent) {
       static_assert(count < extent);
     } else {
@@ -260,32 +254,49 @@ public:
     return Slice<T, count, stride>(data_ + (Size() - count) * stride, count, stride);
   }
 
-  Slice<T, std::dynamic_extent, stride> DropFirst(std::size_t count) const {
+  constexpr Slice<T, std::dynamic_extent, stride> DropFirst(std::size_t count) const {
     return Last(Size() - count);
   }
 
   template <std::size_t count>
-  Slice<T, extent - count, stride> DropFirst() const {
+  constexpr Slice<T, extent - count, stride> DropFirst() const {
     return Last<extent - count>();
   }
 
-  Slice<T, std::dynamic_extent, stride> DropLast(std::size_t count) const {
+  constexpr Slice<T, std::dynamic_extent, stride> DropLast(std::size_t count) const {
     return First(Size() - count);
   }
 
   template <std::size_t count>
-  Slice<T, extent - count, stride> DropLast() const {
+  constexpr Slice<T, extent - count, stride> DropLast() const {
     return First<extent - count>();
   }
 
-  Slice<T, std::dynamic_extent, detail::dynamic_stride> Skip(std::ptrdiff_t skip) const {
-    return Slice<T, std::dynamic_extent, detail::dynamic_stride>(data_, Size() / skip, skip * Stride());
+  constexpr Slice<T, std::dynamic_extent, detail::dynamic_stride> Skip(std::ptrdiff_t skip) const {
+    return Slice<T, std::dynamic_extent, detail::dynamic_stride>(data_, Size() / skip + (Size() % skip) == 1, skip * Stride());
   }
 
   template <std::ptrdiff_t skip>
-  Slice<T, std::dynamic_extent, skip * stride * (stride != detail::dynamic_stride) + detail::dynamic_stride * (stride == detail::dynamic_stride)> Skip() const {
-    constexpr auto newStride = skip * stride * (stride != detail::dynamic_stride) + detail::dynamic_stride * (stride == detail::dynamic_stride);
-    return Slice<T, std::dynamic_extent, newStride>(data_, Size() / skip, skip * Stride());
+  constexpr auto Skip() const {
+    auto getNTTPParams = [] () {
+      difference_type newStride = 0;
+      size_type newExtent = 0;
+      if constexpr (stride != detail::dynamic_stride) {
+        newStride = skip * stride;
+        if constexpr (extent != std::dynamic_extent) {
+          newExtent = extent / skip + (extent % skip == 1) ;
+        } else {
+          newExtent = std::dynamic_extent;
+        } 
+      } else {
+        newStride = detail::dynamic_stride;
+      }
+
+      return std::pair{newExtent, newStride};
+    };
+
+    constexpr std::pair params = getNTTPParams();
+    return Slice<T, params.first, params.second>(data_, Size() / skip + (Size() % skip == 1), skip * Stride());
   }
 
   // TODO: MB should pass const Slice<T>& ???
@@ -300,8 +311,5 @@ private:
 template <std::contiguous_iterator It>
 Slice(It, std::size_t, std::ptrdiff_t) -> Slice<typename std::remove_reference_t<It>::value_type>;
 
-template <class U>
-Slice(U& obj) -> Slice<typename std::remove_reference_t<U>::value_type>;
-
-// template <typename T, std::size_t size>
-// Slice(const std::array<T, size>&, std::ptrdiff_t) -> Slice<T, size>;
+template <typename U>
+Slice(const std::vector<U>&, std::ptrdiff_t = 1) -> Slice<U>;
