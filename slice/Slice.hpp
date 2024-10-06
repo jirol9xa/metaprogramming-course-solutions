@@ -8,7 +8,6 @@
 #include <array>
 #include <iterator>
 #include <type_traits>
-#include <ranges>
 #include <iterator>
 
 namespace detail {
@@ -135,8 +134,10 @@ public:
 
   constexpr Slice() = default;
 
+  constexpr explicit Slice(const std::array<T, extent> &arr, std::ptrdiff_t skip = 1) : std::conditional_t<stride == detail::dynamic_stride, detail::Stride, detail::Empty<1>>(skip), data_(arr.data()) {}
+
   template<class U>
-  constexpr Slice(U& container) : std::conditional_t<extent == std::dynamic_extent, detail::Extent, detail::Empty<0>>(std::ranges::size(container)), data_(std::ranges::data(container)) {}
+  constexpr Slice(U& container) : std::conditional_t<extent == std::dynamic_extent, detail::Extent, detail::Empty<0>>(std::size(container)), data_(std::data(container)) {}
 
   template <std::contiguous_iterator It>
   constexpr Slice(It first, std::size_t count, std::ptrdiff_t skip = 1) : std::conditional_t<extent == std::dynamic_extent, detail::Extent, detail::Empty<0>>(count),
@@ -154,10 +155,10 @@ public:
   constexpr pointer Data() const noexcept { return data_; }
 
   constexpr size_type Size() const {
-    if constexpr (extent == std::dynamic_extent) {
-      return detail::Extent::Extent;
-    } else {
+    if constexpr (extent != std::dynamic_extent) {
       return extent;
+    } else {
+      return detail::Extent::Extent;
     }
   }
 
@@ -223,7 +224,7 @@ public:
           && (outer_extent == std::dynamic_extent || outer_extent == extent)
           && (outer_stride == detail::dynamic_stride || outer_stride == stride)
     )
-  operator Slice<U, outer_extent, outer_stride>() const {
+  constexpr operator Slice<U, outer_extent, outer_stride>() const {
     return Slice<U, outer_extent, outer_stride>(data_, Size(), Stride());
   }
 
@@ -233,7 +234,7 @@ public:
   }
 
   template <std::size_t count>
-  Slice<T, count, stride> First() const {
+  constexpr Slice<T, count, stride> First() const {
     if constexpr (extent != std::dynamic_extent) {
       static_assert(count < extent);
     } else {
@@ -265,7 +266,6 @@ public:
 
   template <std::size_t count>
   Slice<T, extent - count, stride> DropFirst() const {
-    static_assert(extent != std::dynamic_extent, "Can not call NTTP parametrized method on not NTTP parametrizes object");
     return Last<extent - count>();
   }
 
@@ -275,17 +275,17 @@ public:
 
   template <std::size_t count>
   Slice<T, extent - count, stride> DropLast() const {
-    static_assert(extent != std::dynamic_extent, "Can not call NTTP parametrized method on not NTTP parametrizes object");
     return First<extent - count>();
   }
 
   Slice<T, std::dynamic_extent, detail::dynamic_stride> Skip(std::ptrdiff_t skip) const {
-    return Slice<T, std::dynamic_extent, detail::dynamic_stride>(data_, Size() * Stride() / skip, skip);
+    return Slice<T, std::dynamic_extent, detail::dynamic_stride>(data_, Size() / skip, skip * Stride());
   }
 
   template <std::ptrdiff_t skip>
-  Slice<T, std::dynamic_extent, skip> Skip() const {
-    return Slice<T, std::dynamic_extent, skip>(data_, Size() * Stride() / skip, skip);
+  Slice<T, std::dynamic_extent, skip * stride * (stride != detail::dynamic_stride) + detail::dynamic_stride * (stride == detail::dynamic_stride)> Skip() const {
+    constexpr auto newStride = skip * stride * (stride != detail::dynamic_stride) + detail::dynamic_stride * (stride == detail::dynamic_stride);
+    return Slice<T, std::dynamic_extent, newStride>(data_, Size() / skip, skip * Stride());
   }
 
   // TODO: MB should pass const Slice<T>& ???
@@ -301,4 +301,7 @@ template <std::contiguous_iterator It>
 Slice(It, std::size_t, std::ptrdiff_t) -> Slice<typename std::remove_reference_t<It>::value_type>;
 
 template <class U>
-Slice(U&) -> Slice<typename std::remove_reference_t<U>::value_type>;
+Slice(U& obj) -> Slice<typename std::remove_reference_t<U>::value_type>;
+
+// template <typename T, std::size_t size>
+// Slice(const std::array<T, size>&, std::ptrdiff_t) -> Slice<T, size>;
