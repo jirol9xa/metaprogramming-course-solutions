@@ -273,7 +273,7 @@ public:
   }
 
   constexpr Slice<T, std::dynamic_extent, detail::dynamic_stride> Skip(std::ptrdiff_t skip) const {
-    return Slice<T, std::dynamic_extent, detail::dynamic_stride>(data_, Size() / skip + (Size() % skip) == 1, skip * Stride());
+    return Slice<T, std::dynamic_extent, detail::dynamic_stride>(data_, Size() / skip + 1, skip * Stride());
   }
 
   template <std::ptrdiff_t skip>
@@ -296,12 +296,17 @@ public:
     };
 
     constexpr std::pair params = getNTTPParams();
-    return Slice<T, params.first, params.second>(data_, Size() / skip + (Size() % skip == 1), skip * Stride());
+    return Slice<T, params.first, params.second>(data_, Size() / skip + 1, skip * Stride());
   }
 
-  // TODO: MB should pass const Slice<T>& ???
-  constexpr bool operator==(const Slice<T, extent, stride>& other) const {
-    return std::equal(other.begin(), other.end(), begin());
+  template <typename OtherT, std::size_t OtherExtent = std::dynamic_extent, std::ptrdiff_t OtherStride = detail::dynamic_stride>
+    requires (std::same_as<std::remove_cv_t<T>, std::remove_cv_t<OtherT>>)
+  constexpr bool operator==(const Slice<OtherT, OtherExtent, OtherStride>& other) const {
+    if (Size() != other.Size()) {
+      return false;
+    }
+
+    return std::equal(begin(), end(), other.begin());
   }
 
 private:
@@ -309,7 +314,7 @@ private:
 };
 
 template <std::contiguous_iterator It>
-Slice(It, std::size_t, std::ptrdiff_t) -> Slice<typename std::remove_reference_t<It>::value_type>;
+Slice(It, std::size_t, std::ptrdiff_t) -> Slice<typename std::remove_reference_t<It>::value_type, std::dynamic_extent, detail::dynamic_stride>;
 
 template <typename U>
 Slice(const std::vector<U>&, std::ptrdiff_t = 1) -> Slice<U>;
