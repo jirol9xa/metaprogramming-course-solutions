@@ -56,44 +56,56 @@ public:
     using iterator_category = std::contiguous_iterator_tag;
 
     constexpr SliceIter() = default;
-    constexpr explicit SliceIter(U* data, std::ptrdiff_t itStride) : 
-                              std::conditional_t<iter_stride == detail::dynamic_stride, detail::Stride, detail::Empty<0>>(itStride), data_(data) {}
+    constexpr explicit SliceIter(U* data, std::ptrdiff_t itStride, const U* begin, const U* end) : 
+                              std::conditional_t<iter_stride == detail::dynamic_stride, detail::Stride, detail::Empty<0>>(itStride), 
+                              data_(data), begin_(begin), end_(end) {}
+
+    constexpr SliceIter(const SliceIter&) = default;
+    constexpr SliceIter& operator=(const SliceIter&) = default;
 
     constexpr SliceIter<U, iter_stride> operator++(int) {
       auto tmp(*this);
       data_ += Stride();
+      CheckUpperBound(data_);
       return tmp;
     }
     constexpr auto& operator++() {
       data_ += Stride();
+      CheckUpperBound(data_);
       return *this;
     }
     constexpr auto operator--(int) {
       auto tmp(*this);
       data_ -= Stride();
+      CheckLowerBound(data_);
       return tmp;
     }
     constexpr auto& operator--() {
       data_ -= Stride();
+      CheckLowerBound(data_);
       return *this;
     }
 
     constexpr auto& operator+=(difference_type offset) {
       data_ += offset * Stride();
+      CheckUpperBound(data_);
       return *this;
     }
     constexpr auto operator+(difference_type offset) const {
       auto tmp(*this);
       tmp += offset;
+      CheckUpperBound(tmp.data_);
       return tmp;
     }
     constexpr auto& operator-=(difference_type offset) {
       data_ -= offset * Stride();
+      CheckLowerBound(data_);
       return *this;
     }
     constexpr auto operator-(difference_type offset) const {
       auto tmp(*this);
       tmp -= offset;
+      CheckLowerBound(tmp.data_);
       return tmp;
     }
 
@@ -129,7 +141,16 @@ public:
       }
     }
 
+    void CheckUpperBound(U* ptr) const {
+      MPC_VERIFYF(ptr <= end_, "SliceIterator out of valid range");
+    }
+    void CheckLowerBound(U* ptr) const {
+      MPC_VERIFYF(ptr >= begin_, "SliceIterator out of valid range");
+    }
+
     U* data_; 
+    const U* begin_;
+    const U* end_;
   };
 
   using element_type = T;
@@ -158,9 +179,23 @@ public:
   constexpr Slice(It first, std::size_t count, std::ptrdiff_t skip = 1) : std::conditional_t<extent == std::dynamic_extent, detail::Extent, detail::Empty<0>>(count / skip + (count % skip != 0)),
                                                                           std::conditional_t<stride == detail::dynamic_stride, detail::Stride, detail::Empty<1>>(skip),
                                                                           data_(&*first)  {}
-  template <typename U>
-  constexpr Slice(std::vector<U>& vec, std::ptrdiff_t skip = 1) : Slice(vec.begin(), vec.size() / skip + (vec.size() % skip != 0), skip) {}
+  
+  constexpr Slice(T* data, std::size_t count, std::ptrdiff_t skip = 1) : std::conditional_t<extent == std::dynamic_extent, detail::Extent, detail::Empty<0>>(count / skip + (count % skip != 0)),
+                                                                          std::conditional_t<stride == detail::dynamic_stride, detail::Stride, detail::Empty<1>>(skip),
+                                                                          data_(data)  {}
 
+  template <typename U>
+  constexpr Slice(std::vector<U>& vec, std::ptrdiff_t skip) : Slice<T, extent, stride>(vec.begin(), vec.size() * skip, skip) {
+    if constexpr (extent != std::dynamic_extent) {
+      MPC_VERIFYF(extent * Stride() <= vec.size(), "Can't construct slice from vector with not enough elems");
+    }
+    if constexpr (stride != detail::dynamic_stride) {
+      MPC_VERIFYF(stride == skip, "NTTP stride should match func param");
+    }
+  }
+
+  template <typename U>
+  constexpr Slice(std::vector<U>& vec) : Slice<T, extent, stride>(vec, stride == detail::dynamic_stride ? 1 : stride) {}
 
   constexpr pointer Data() const noexcept { return data_; }
 
@@ -180,20 +215,11 @@ public:
     }
   }
 
-  constexpr iterator begin() const noexcept { return SliceIter<T, stride>(data_, Stride()); }
+  constexpr iterator begin() const noexcept {
+    return SliceIter<T, stride>(data_, Stride(), data_, data_ + Stride() * Size());
+  }
   constexpr iterator end() const noexcept {
-    difference_type strideDiff = 0;
-    if constexpr (stride != detail::dynamic_stride) {
-      strideDiff = stride;
-    } else {
-      strideDiff = detail::Stride::StrideImpl;
-    }
-
-    if constexpr (extent != std::dynamic_extent) {
-      return SliceIter<T, stride>(data_ + extent * strideDiff, Stride());
-    } else {
-      return SliceIter<T, stride>(data_ + detail::Extent::ExtentImpl * strideDiff, Stride());
-    }
+      return SliceIter<T, stride>(data_ + Size() * Stride(), Stride(), data_, data_ + Size() * Stride());
   }
 
   constexpr reverse_iterator rbegin() const noexcept { 
@@ -228,12 +254,14 @@ public:
           && (outer_stride == detail::dynamic_stride || outer_stride == stride)
     )
   constexpr operator Slice<U, outer_extent, outer_stride>() const {
-    return Slice<U, outer_extent, outer_stride>(begin(), Size(), Stride());
+    return Slice<U, outer_extent, outer_stride>(begin(), Size() * Stride(), Stride());
   }
 
   constexpr Slice<T, std::dynamic_extent, stride> First(std::size_t count) const 
   {
-    return Slice<T, std::dynamic_extent, stride>(begin(), count, stride);
+    MPC_VERIFY(count < Size());
+
+    return Slice<T, std::dynamic_extent, stride>(begin(), count * Stride(), Stride());
   }
 
   template <std::size_t count>
@@ -244,12 +272,12 @@ public:
       MPC_VERIFY(count < Size());
     }
 
-    return Slice<T, count, stride>(begin(), count, stride);
+    return Slice<T, count, stride>(begin(), count * Stride(), Stride());
   }
 
   constexpr Slice<T, std::dynamic_extent, stride> Last(std::size_t count) const {
     MPC_VERIFY(count < Size());
-    return Slice<T, std::dynamic_extent, stride>(begin() + (Size() - count) * stride, count, stride);
+    return Slice<T, std::dynamic_extent, stride>(begin() + (Size() - count), count * Stride(), Stride());
   }
 
   template <std::size_t count>
@@ -260,7 +288,7 @@ public:
       MPC_VERIFY(count < Size());
     }
 
-    return Slice<T, count, stride>(begin() + (Size() - count) * stride, count, stride);
+    return Slice<T, count, stride>(begin() + (Size() - count), count * Stride(), Stride());
   }
 
   constexpr Slice<T, std::dynamic_extent, stride> DropFirst(std::size_t count) const {
@@ -268,8 +296,8 @@ public:
   }
 
   template <std::size_t count>
-  constexpr Slice<T, extent - count, stride> DropFirst() const {
-    return Last<extent - count>();
+  constexpr auto DropFirst() const {
+    return Last(Size() - count);
   }
 
   constexpr Slice<T, std::dynamic_extent, stride> DropLast(std::size_t count) const {
@@ -277,8 +305,8 @@ public:
   }
 
   template <std::size_t count>
-  constexpr Slice<T, extent - count, stride> DropLast() const {
-    return First<extent - count>();
+  constexpr auto DropLast() const {
+    return First(Size() - count);
   }
 
   constexpr Slice<T, std::dynamic_extent, detail::dynamic_stride> Skip(std::ptrdiff_t skip) const {
@@ -315,7 +343,7 @@ public:
   }
 
 private:
-  T* data_;
+  T* data_ = nullptr;
 };
 
 template <std::contiguous_iterator It>
