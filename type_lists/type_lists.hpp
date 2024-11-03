@@ -3,6 +3,7 @@
 #include <concepts>
 
 #include <cstddef>
+#include <type_traits>
 #include <type_tuples.hpp>
 
 
@@ -55,8 +56,8 @@ struct ToTupleImpl {
                                         >::type;
 };
 
-template <>
-struct ToTupleImpl<Nil> {
+template <Empty T>
+struct ToTupleImpl<T> {
     using type = type_tuples::TTuple<>;
 };
 
@@ -174,16 +175,21 @@ using Cycle = CycleImpl<TL, TL>;
 
 template <template <typename> class Func, TypeList TL>
 struct MapImpl {
-    using type = Cons<Func<typename TL::Head>, typename MapImpl<Func, typename TL::Tail>::type>;
+    using Head = Func<typename TL::Head>;
+    using Tail = MapImpl<Func, typename TL::Tail>;
+};
+
+template <template <typename> class Func, typename T>
+struct MapImpl<Func, Cons<T, Nil>> {
+    using Head = Func<T>;
+    using Tail = Nil;
 };
 
 template <template <typename> class Func>
-struct MapImpl<Func, Nil> {
-    using type = Nil;
-};
+struct MapImpl<Func, Nil> : Nil {};
 
 template <template <typename> class Func, TypeList TL>
-using Map = MapImpl<Func, TL>::type;
+using Map = MapImpl<Func, TL>;
 
 // Your fun, fun metaalgorithms :)
 
