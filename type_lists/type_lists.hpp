@@ -93,9 +93,9 @@ struct TakeImpl {
     using type = Cons<typename TL::Head, typename TakeImpl<Idx - 1, typename TL::Tail>::type>;
 };
 
-template <TypeList TL>
-struct TakeImpl<1, TL> {
-    using type = Cons<typename TL::Head, Nil>;
+template <Empty TL>
+struct TakeImpl<0, TL> {
+    using type = Nil;
 };
 
 template <TypeList TL>
@@ -103,8 +103,8 @@ struct TakeImpl<0, TL> {
     using type = Nil;
 };
 
-template <std::size_t Idx>
-struct TakeImpl<Idx, Nil> {
+template <std::size_t Idx, Empty TL>
+struct TakeImpl<Idx, TL> {
     using type = Nil;
 };
 
@@ -123,6 +123,11 @@ struct DropImpl {
 template <TypeList TL>
 struct DropImpl<0, TL> {
     using type = TL;
+};
+
+template<>
+struct DropImpl<0, Nil> : Nil {
+    using type = Nil;
 };
 
 template <std::size_t Amnt>
@@ -185,8 +190,8 @@ struct MapImpl<Func, Cons<T, Nil>> {
     using Tail = Nil;
 };
 
-template <template <typename> class Func>
-struct MapImpl<Func, Nil> : Nil {};
+template <template <typename> class Func, Empty TL>
+struct MapImpl<Func, TL> : Nil {};
 
 template <template <typename> class Func, TypeList TL>
 using Map = MapImpl<Func, TL>;
@@ -257,6 +262,95 @@ struct ScanlInit {
 
 template <template <typename, typename> class Op, typename T, TypeList TL>
 using Scanl = ScanlInit<Op, T, TL>;
+
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <template <typename, typename> class Op, typename T, TypeList TL>
+struct FoldlImpl {
+    using newT = Op<T, typename TL::Head>;
+    using type = FoldlImpl<Op, newT, typename TL::Tail>::type;
+};
+
+template <template <typename, typename> class Op, typename T, Empty TL>
+struct FoldlImpl<Op, T, TL> {
+    using type = T;
+};
+
+template <template <typename, typename> class Op, typename T, TypeList TL>
+using Foldl = FoldlImpl<Op, T, TL>::type;
+
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+template <TypeList TL, std::size_t Length, TypeList PrevTL>
+struct InitsImpl {
+    using Head = Take<Length, TL>;
+    using Tail = InitsImpl<TL, Length + 1, Head>;
+};
+
+template <TypeList TL, std::size_t Length, TypeList PrevTL>
+    requires (Length != 0) && std::same_as<ToTuple<PrevTL>, ToTuple<Take<Length, TL>>>
+struct InitsImpl<TL, Length, PrevTL> : Nil {};
+
+template <TypeList TL>
+using Inits = InitsImpl<TL, 0, Nil>;
+
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+template <TypeList TL>
+struct TailsImpl {
+    using Head = TL;
+    using Tail = TailsImpl<Drop<1, TL>>;
+};
+
+template <>
+struct TailsImpl<Nil> {
+    using Head = Nil;
+    using Tail = Nil;
+};
+
+template <TypeList TL>
+using Tails = TailsImpl<TL>;
+
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+template <TypeList L, TypeList R>
+struct Zip2Impl {
+    using Head = type_tuples::TTuple<typename L::Head, typename R::Head>;
+    using Tail = Zip2Impl<Drop<1, L>, Drop<1, R>>;
+};
+
+template <TypeList L, TypeList R>
+    requires Empty<L> || Empty<R>
+struct Zip2Impl<L, R> : Nil {};
+
+template <TypeList L, TypeList R>
+using Zip2 = Zip2Impl<L, R>;
+
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <TypeList... TLs>
+struct ZipImpl {
+    using Head = type_tuples::TTuple<typename TLs::Head...>;
+    using Tail = ZipImpl<typename TLs::Tail...>;
+};
+
+template <TypeList... TLs>
+constexpr bool AnyEmpty = (Empty<TLs> + ...);
+
+template <TypeList... TLs>
+    requires AnyEmpty<TLs...>
+struct ZipImpl<TLs...> : Nil {};
+
+template <TypeList... TLs>
+using Zip = ZipImpl<TLs...>;
 
 // Your fun, fun metaalgorithms :)
 
