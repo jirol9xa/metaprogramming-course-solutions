@@ -56,6 +56,12 @@ struct ToTupleImpl {
                                         >::type;
 };
 
+template <TypeList TL>
+    requires Empty<typename TL::Head>
+struct ToTupleImpl<TL> {
+    using type = typename ToTupleImpl<typename TL::Tail>::type;
+};
+
 template <Empty T>
 struct ToTupleImpl<T> {
     using type = type_tuples::TTuple<>;
@@ -269,6 +275,7 @@ using Scanl = ScanlInit<Op, T, TL>;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+
 template <template <typename, typename> class Op, typename T, TypeList TL>
 struct FoldlImpl {
     using newT = Op<T, typename TL::Head>;
@@ -282,6 +289,23 @@ struct FoldlImpl<Op, T, TL> {
 
 template <template <typename, typename> class Op, typename T, TypeList TL>
 using Foldl = FoldlImpl<Op, T, TL>::type;
+
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+template <template <typename, typename> class Op, typename T, TypeList TL>
+struct FoldrImpl {
+    using type = Op<T, typename FoldrImpl<Op, typename TL::Head, typename TL::Tail>::type>;
+};
+
+template <template <typename, typename> class Op, typename T, Empty TL>
+struct FoldrImpl<Op, T, TL> {
+    using type = Op<T, Nil>;
+};
+
+template <template <typename, typename> class Op, typename T, TypeList TL>
+using Foldr = FoldrImpl<Op, T, TL>::type;
 
 
 ////////////////////////////////////////////////////////////////////////////////
