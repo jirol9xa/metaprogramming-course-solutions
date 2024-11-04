@@ -1,5 +1,6 @@
 #pragma once
 
+#include <concepts>
 #include <optional>
 #include <tuple>
 
@@ -25,6 +26,7 @@ struct Holder {
 template <class From, auto target>
 struct Mapping {
   using FromType = From;
+  using Target = decltype(target);
   static Holder<decltype(target)> GetTarget(const From* ptr) {
     if (!ptr) {
       return Holder<decltype(target)>(std::nullopt);
@@ -34,7 +36,11 @@ struct Mapping {
   }
 };
 
+template <typename T, typename... Ts>
+constexpr bool AreSame = (std::same_as<T, Ts> && ... && true);
+
 template <class Base, class Target, class... Mappings>
+  requires (sizeof...(Mappings) == 0 || AreSame<typename Mappings::Target...>)
 struct PolymorphicMapper : Mappings...{
   using Mappings::GetTarget...;
 
