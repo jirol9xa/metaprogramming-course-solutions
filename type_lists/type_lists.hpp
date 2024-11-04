@@ -171,6 +171,9 @@ struct CycleImpl<Nil, OrigTL> {
     using Tail = CycleImpl<typename OrigTL::Tail, OrigTL>;
 };
 
+template <>
+struct CycleImpl<Nil, Nil> : Nil {};
+
 template <TypeList TL>
 using Cycle = CycleImpl<TL, TL>;
 
@@ -343,14 +346,19 @@ struct ZipImpl {
 };
 
 template <TypeList... TLs>
-constexpr bool AnyEmpty = (Empty<TLs> + ...);
+constexpr bool AnyEmpty = (Empty<TLs> || ...);
 
-template <TypeList... TLs>
-    requires AnyEmpty<TLs...>
-struct ZipImpl<TLs...> : Nil {};
+template <TypeList T, TypeList... TLs>
+    requires AnyEmpty<T, TLs...>
+struct ZipImpl<T, TLs...> : Nil {};
 
 template <TypeList... TLs>
 using Zip = ZipImpl<TLs...>;
+
+
+////////////////////////////////////////////////////////////////////////////////
+
+
 
 // Your fun, fun metaalgorithms :)
 
