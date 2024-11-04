@@ -191,6 +191,54 @@ struct MapImpl<Func, Nil> : Nil {};
 template <template <typename> class Func, TypeList TL>
 using Map = MapImpl<Func, TL>;
 
+
+////////////////////////////////////////////////////////////////////////////////
+
+template <template <typename> class Pred, TypeList TL, bool IsMatched>
+struct FirstMatchImpl;
+
+template <template <typename> class Pred, TypeList TL>
+struct FirstMatch {
+    using type = FirstMatchImpl<Pred, TL, Pred<typename TL::Head>::Value>::type; 
+};
+
+template <template <typename> class Pred, TypeList TL>
+struct FirstMatchImpl<Pred, TL, true> {
+    using type = TL;
+};
+
+template <template <typename> class Pred, TypeList TL>
+struct FirstMatchImpl<Pred, TL, false> {
+    using type = FirstMatch<Pred, typename TL::Tail>::type;
+};
+
+template <template <typename> class Pred>
+struct FirstMatch<Pred, Nil> : Nil {
+    using type = Nil;
+};
+
+template <template <typename> class Pred, TypeList TL>
+struct FilterImpl {
+    using FirstMatch = FirstMatch<Pred, TL>::type;
+    using Head = FirstMatch::Head;
+    using Tail = FilterImpl<Pred, typename FirstMatch::Tail>;
+};
+
+template <template <typename> class Pred, TypeList TL>
+    requires Empty<FirstMatch<Pred, TL>>
+struct FilterImpl<Pred, TL> : Nil {};
+
+template <template <typename> class Pred>
+struct FilterImpl<Pred, Nil> : Nil {};
+
+template <template <typename> class Pred, TypeList TL>
+using Filter = FilterImpl<Pred, TL>;
+
+
+////////////////////////////////////////////////////////////////////////////////
+
+
+
 // Your fun, fun metaalgorithms :)
 
 } // namespace type_lists
