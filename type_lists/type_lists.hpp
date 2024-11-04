@@ -238,6 +238,25 @@ using Filter = FilterImpl<Pred, TL>;
 ////////////////////////////////////////////////////////////////////////////////
 
 
+template <template <typename, typename> class Op, TypeList TL>
+struct ScanlImpl {
+    using Head = Op<typename TL::Head, typename TL::Tail::Head>;
+    using Tail = ScanlImpl<Op, typename TL::Tail>;
+};
+
+template <template <typename, typename> class Op, TypeList TL>
+    requires Empty<typename TL::Tail>
+struct ScanlImpl<Op, TL> : Nil {};
+
+template <template <typename, typename> class Op, typename T, TypeList TL>
+struct ScanlInit {
+    using Head = T;
+    // Are u sure, that we should concat???
+    using Tail = ScanlImpl<Op, Cons<T, TL>>;
+};
+
+template <template <typename, typename> class Op, typename T, TypeList TL>
+using Scanl = ScanlInit<Op, T, TL>;
 
 // Your fun, fun metaalgorithms :)
 
