@@ -24,69 +24,42 @@ struct EnumeratorTraits {
         using EnumType = std::underlying_type_t<MetaEnum>;
 
     public:
-        constexpr void FillMeta() {
-            if (!IsFilled) {
-                FillMetaImpl();
-            }
-        }
         std::size_t Size = 0;
-        std::pair<std::underlying_type_t<MetaEnum>, std::string_view> Enumerators[1025] = {};
+        EnumType EnumeratorValues[1025] = {};
+        std::string_view EnumeratorsNames[1025] = {};
     
-    private:
-        template <auto Value>
-        consteval std::string_view GetPrettyFunc() {
-            return {__PRETTY_FUNCTION__};
-        }
+        template <auto Start, auto End>
+        constexpr inline void for_loop() {
+            if constexpr (Start <= End) {
+                std::string_view pretty = __PRETTY_FUNCTION__;
+                constexpr std::string_view substrToFind = "Start = ";
+                auto name = pretty.substr(pretty.find(substrToFind) + substrToFind.size());
+                name = name.substr(0, name.find_first_of(";"));
 
-        template <auto Start, auto End, class F>
-        constexpr void for_loop(F&& f) {
-            if constexpr (Start < End) {
-                f(std::integral_constant<decltype(Start), Start>());
-                for_loop<Start + 1, End>(f);
+                if (name[0] == '(') {
+                    return;
+                }
+
+                if constexpr (!detail::ScopedEnum<Enum>) {
+                    EnumeratorValues[Size] = Start;
+                    EnumeratorsNames[Size] = name;
+                } else {
+                    name = name.substr(name.find_last_of(":"));
+                    EnumeratorValues[Size] = Start;
+                    EnumeratorsNames[Size] = name;
+                }
+
+                ++Size;
+                
+                for_loop<Start + 1, End>();
             }
         }
 
-        consteval void FillMetaImpl() {
-            if constexpr (std::is_signed_v<EnumType>) {
-                for_loop<static_cast<EnumType>(-MetaMAXN), static_cast<EnumType>(MetaMAXN)>([&](auto I) {
-                    //std::string_view pretty = GetPrettyFunc<static_cast<MetaEnum>(static_cast<EnumType>(I))>();
-                    // constexpr std::string_view substrToFind = "Value = ";
-                    // auto name = pretty.substr(pretty.find(substrToFind) + substrToFind.size());
-                    // name = name.substr(0, name.find_first_of(";"));
-
-                    // if (name[0] == '(') {
-                    //     return;
-                    // }
-
-                    // if constexpr (!detail::ScopedEnum<Enum>) {
-                    //     Enumerators[Size] = {I, name};
-                    // } else {
-                    //     name = name.substr(name.find_last_of(":"));
-                    //     Enumerators[Size] = {I, name};
-                    // }
-
-                    ++Size;
-                });
+        consteval inline void FillMetaImpl() {
+            if constexpr (std::is_signed<EnumType>()) {
+                for_loop<static_cast<EnumType>(-MetaMAXN), static_cast<EnumType>(MetaMAXN)>();
             } else {
-                for_loop<static_cast<EnumType>(0), static_cast<EnumType>(MetaMAXN)>([&](auto I) {
-                    // std::string_view pretty = GetPrettyFunc<static_cast<MetaEnum>(static_cast<EnumType>(I))>();
-                    // constexpr std::string_view substrToFind = "Value = ";
-                    // auto name = pretty.substr(pretty.find(substrToFind) + substrToFind.size());
-                    // name = name.substr(0, name.find_first_of(";"));
-
-                    // if (name[0] == '(') {
-                    //     return;
-                    // }
-
-                    // if constexpr (!detail::ScopedEnum<Enum>) {
-                    //     Enumerators[Size] = {(EnumType)I, name};
-                    // } else {
-                    //     name = name.substr(name.find_last_of(":"));
-                    //     Enumerators[Size] = {(EnumType)I, name};
-                    // }
-
-                    ++Size;
-                });
+                for_loop<0, static_cast<EnumType>(MetaMAXN)>();
             }
         }
 
@@ -95,7 +68,7 @@ struct EnumeratorTraits {
 
     static constexpr std::size_t size() noexcept {
         Meta<Enum, MAXN> meta;
-        meta.FillMeta();
+        meta.FillMetaImpl();
         return meta.Size;
     }
     static constexpr Enum at(std::size_t i) noexcept {
