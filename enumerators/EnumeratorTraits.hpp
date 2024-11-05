@@ -21,6 +21,8 @@ struct EnumeratorTraits {
 
     template <class MetaEnum, std::size_t MetaMAXN>
     class Meta{
+        using EnumType = std::underlying_type_t<MetaEnum>;
+
     public:
         constexpr void FillMeta() {
             if (!IsFilled) {
@@ -31,60 +33,61 @@ struct EnumeratorTraits {
         std::pair<std::underlying_type_t<MetaEnum>, std::string_view> Enumerators[1025] = {};
     
     private:
-        using EnumType = std::underlying_type_t<MetaEnum>;
-
         template <auto Value>
         consteval std::string_view GetPrettyFunc() {
             return {__PRETTY_FUNCTION__};
         }
 
-        template <auto Start, auto End, auto Inc, class F>
+        template <auto Start, auto End, class F>
         constexpr void for_loop(F&& f) {
             if constexpr (Start < End) {
                 f(std::integral_constant<decltype(Start), Start>());
-                for_loop<Start + 1, End, Inc>(f);
+                for_loop<Start + 1, End>(f);
             }
         }
 
         consteval void FillMetaImpl() {
-            for_loop<static_cast<EnumType>(0), static_cast<EnumType>(MetaMAXN), 1>([&](auto I) {
-                std::string_view pretty = GetPrettyFunc<static_cast<MetaEnum>(static_cast<EnumType>(I))>();
-                constexpr std::string_view substrToFind = "Value = ";
-                auto name = pretty.substr(pretty.find(substrToFind) + substrToFind.size());
-                name = name.substr(0, name.find_first_of(";"));
+            if constexpr (std::is_signed_v<EnumType>) {
+                for_loop<static_cast<EnumType>(-MetaMAXN), static_cast<EnumType>(MetaMAXN)>([&](auto I) {
+                    //std::string_view pretty = GetPrettyFunc<static_cast<MetaEnum>(static_cast<EnumType>(I))>();
+                    // constexpr std::string_view substrToFind = "Value = ";
+                    // auto name = pretty.substr(pretty.find(substrToFind) + substrToFind.size());
+                    // name = name.substr(0, name.find_first_of(";"));
 
-                if (name[0] == '(') {
-                    return;
-                }
+                    // if (name[0] == '(') {
+                    //     return;
+                    // }
 
-                if constexpr (!detail::ScopedEnum<Enum>) {
-                    Enumerators[Size] = {I, name};
-                } else {
-                    name = name.substr(name.find_last_of(":"));
-                    Enumerators[Size] = {I, name};
-                }
+                    // if constexpr (!detail::ScopedEnum<Enum>) {
+                    //     Enumerators[Size] = {I, name};
+                    // } else {
+                    //     name = name.substr(name.find_last_of(":"));
+                    //     Enumerators[Size] = {I, name};
+                    // }
 
-                ++Size;
-            });
-            // for (EnumType i = std::numeric_limits<EnumType>::min(); i < static_cast<EnumType>(MetaMAXN); ++i) {
-            //     std::string_view pretty = GetPrettyFunc<static_cast<MetaEnum>(i)>();
-            //     constexpr std::string_view substrToFind = "Value = ";
-            //     auto name = pretty.substr(pretty.find(substrToFind) + substrToFind.size());
-            //     name = name.substr(0, name.find_first_of(";"));
+                    ++Size;
+                });
+            } else {
+                for_loop<static_cast<EnumType>(0), static_cast<EnumType>(MetaMAXN)>([&](auto I) {
+                    // std::string_view pretty = GetPrettyFunc<static_cast<MetaEnum>(static_cast<EnumType>(I))>();
+                    // constexpr std::string_view substrToFind = "Value = ";
+                    // auto name = pretty.substr(pretty.find(substrToFind) + substrToFind.size());
+                    // name = name.substr(0, name.find_first_of(";"));
 
-            //     if (name[0] == '(') {
-            //         return;
-            //     }
+                    // if (name[0] == '(') {
+                    //     return;
+                    // }
 
-            //     if constexpr (!detail::ScopedEnum<Enum>) {
-            //         Enumerators[Size] = {i, name};
-            //     } else {
-            //         name = name.substr(name.find_last_of(":"));
-            //         Enumerators[Size] = {i, name};
-            //     }
+                    // if constexpr (!detail::ScopedEnum<Enum>) {
+                    //     Enumerators[Size] = {(EnumType)I, name};
+                    // } else {
+                    //     name = name.substr(name.find_last_of(":"));
+                    //     Enumerators[Size] = {(EnumType)I, name};
+                    // }
 
-            //     ++Size;
-            // }
+                    ++Size;
+                });
+            }
         }
 
         bool IsFilled = false;
