@@ -2,6 +2,7 @@
 
 #include <cstddef>
 #include <cstdio>
+#include <limits>
 #include <string_view>
 #include <type_traits>
 #include <utility>
@@ -26,23 +27,36 @@ struct EnumeratorTraits {
 
     struct  Meta{
         using EnumType = std::underlying_type_t<Enum>;
+        static inline constexpr int MAX = []() {
+            if constexpr (std::is_signed_v<EnumType>) {
+                // |min| = |max| + 1 for signed types
+                return std::numeric_limits<EnumType>::min() > -int(MAXN) ? -int(std::numeric_limits<EnumType>::min()) : MAXN + 1;
+            } else {
+                return std::numeric_limits<EnumType>::max() < MAXN ? std::numeric_limits<EnumType>::max() + 1 : MAXN + 1;
+            }
+        }();
 
         std::size_t Size = 0;
-        std::pair<EnumType, std::string_view> Enumerators[2 * MAXN + 1] = {};
-        std::string_view PrettyStrings[2 * MAXN + 1] = {};
+        std::pair<EnumType, std::string_view> Enumerators[2 * MAX + 1] = {};
+        std::string_view PrettyStrings[2 * MAX + 1] = {};
 
         template <auto... Ids>
         constexpr void CollectPretties(std::integer_sequence<int, Ids...>) {
-            ((PrettyStrings[Ids] = detail::GetPretty<static_cast<Enum>(Ids - MAXN)>()), ...);
-            ((PrettyStrings[Ids + MAXN] = detail::GetPretty<static_cast<Enum>(Ids)>()), ...);
+            if constexpr (std::is_signed_v<EnumType>) {
+                ((PrettyStrings[Ids] = detail::GetPretty<static_cast<Enum>(Ids - MAX)>()), ...);
+            } else {
+                // Fill with invalid values for skip in future
+                ((PrettyStrings[Ids] = std::string_view{"std::string_view detail::GetPretty() [$ = ("}), ...);
+            }
+            ((PrettyStrings[Ids + MAX] = detail::GetPretty<static_cast<Enum>(Ids)>()), ...);
         }
 
         constexpr Meta() {
             constexpr size_t offset = std::string_view{"std::string_view detail::GetPretty() [$ = "}.size();
 
-            CollectPretties(std::make_integer_sequence<int, MAXN + 1>{});
-            for (int i = -(int)MAXN; i <= (int) MAXN; ++i) {
-                auto name = PrettyStrings[i + MAXN].substr(offset);
+            CollectPretties(std::make_integer_sequence<int, MAX>{});
+            for (int i = -(int)MAX; i < (int) MAX; ++i) {
+                auto name = PrettyStrings[i + MAX].substr(offset);
                 if (name[0] == '(') {
                     continue;
                 }
