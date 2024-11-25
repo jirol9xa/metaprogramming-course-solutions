@@ -28,18 +28,19 @@ struct EnumeratorTraits {
         using EnumType = std::underlying_type_t<Enum>;
 
         std::size_t Size = 0;
-        std::pair<EnumType, std::string_view> Enumerators[1025] = {};
-        std::string_view PrettyStrings[1025] = {};
+        std::pair<EnumType, std::string_view> Enumerators[2 * MAXN + 1] = {};
+        std::string_view PrettyStrings[2 * MAXN + 1] = {};
 
         template <auto... Ids>
         constexpr void CollectPretties(std::integer_sequence<int, Ids...>) {
             ((PrettyStrings[Ids] = detail::GetPretty<static_cast<Enum>(Ids - MAXN)>()), ...);
+            ((PrettyStrings[Ids + MAXN] = detail::GetPretty<static_cast<Enum>(Ids)>()), ...);
         }
 
         constexpr Meta() {
             constexpr size_t offset = std::string_view{"std::string_view detail::GetPretty() [$ = "}.size();
 
-            CollectPretties(std::make_integer_sequence<int, 2 * MAXN + 1>{});
+            CollectPretties(std::make_integer_sequence<int, MAXN + 1>{});
             for (int i = -(int)MAXN; i <= (int) MAXN; ++i) {
                 auto name = PrettyStrings[i + MAXN].substr(offset);
                 if (name[0] == '(') {
